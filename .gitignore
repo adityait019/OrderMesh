@@ -2,3 +2,6 @@
 *__pycache__/
 .venv
 uv.lock
+*.db
+*.db-shm
+*.db-wal

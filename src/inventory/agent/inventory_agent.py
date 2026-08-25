@@ -1,5 +1,5 @@
 """
-Order Agent - A2A-compliant order lifecycle management agent
+Inventory Agent - A2A-compliant inventory management agent
 """
 
 from __future__ import annotations
@@ -7,29 +7,29 @@ import os
 import json
 import logging
 import asyncio
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner
+from agents import Agent, Runner,Tool
 from agents.memory import SQLiteSession
+from langchain import tools
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
-from src.order_service.agent.system_instruction import SYSTEM_INSTRUCTION
-from src.order_service.tools.order_tools import all_tools
+from src.inventory.agent.system_instructions import SYSTEM_INSTRUCTION
+from src.inventory.tools.inventory_tools import all_tools
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
 
-AGENT_ID = "org.ecommerce.order_agent.v1"
-AGENT_NAME = "OrderAgent"
+AGENT_ID = "org.ecommerce.inventory_agent.v1"
+AGENT_NAME = "InventoryAgent"
 
 client = AsyncAzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE", ""),
     api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
     api_version=os.getenv("AZURE_OPENAI_API_VERSION", ""),
 )
-
 
 model = OpenAIResponsesModel(
     model=os.getenv("DEPLOYMENT_NAME", ""),
@@ -40,7 +40,7 @@ agent = Agent(
     name=AGENT_NAME,
     instructions=SYSTEM_INSTRUCTION,
     model=model,
-    tools=all_tools,
+    tools=cast(list[Tool], all_tools),
     tool_use_behavior="run_llm_again",
     reset_tool_choice=True,
 )
@@ -67,7 +67,7 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
 
 async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, None]:
     """
-    A2A-compatible async generator for order agent execution.
+    A2A-compatible async generator for inventory agent execution.
     
     Args:
         query: Natural language query or JSON input

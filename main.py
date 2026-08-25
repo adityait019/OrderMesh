@@ -12,7 +12,7 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from utils.agent_card_builder import build_agent_card_from_meta
-from order_service.agent.order_agent import stream_agent_response as execute_fn  # noqa: E402
+from order.agent.order_agent import stream_agent_response as execute_fn  # noqa: E402
 from srcs.order_service.
 from dotenv import load_dotenv
 load_dotenv(override=True)

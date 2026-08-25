@@ -1,0 +1,143 @@
+{
+  "agent_id": "org.ecommerce.inventory_agent.v1",
+  "name": "Inventory Agent",
+  "description": "Manages real-time inventory, verifies SKU stock counts, places temporary holds/reservations on items, finds substitute products when stock is zero, and provides comprehensive inventory visibility across the product catalog.",
+  "short_name": "InventoryAgent",
+  "agent_type": "Inventory Management",
+  "version": "1.0.0",
+  "status": "production",
+  "ownership": {
+    "org": "Ecommerce Platform",
+    "sub_org": "Inventory Management",
+    "creator": "Inventory Team",
+    "license": "Internal",
+    "repository": "https://github.com/ecommerce/inventory-agent"
+  },
+  "specialization": {
+    "primary": "inventory_management",
+    "domain_specific": [
+      "stock_verification",
+      "inventory_reservation",
+      "product_substitution",
+      "stock_level_tracking",
+      "inventory_hold_management",
+      "reservation_confirmation"
+    ]
+  },
+  "capabilities": {
+    "languages": [
+      "Python",
+      "JSON"
+    ],
+    "frameworks": [
+      "OpenAI Agents SDK",
+      "FastAPI",
+      "A2A"
+    ],
+    "platforms": [
+      "Linux",
+      "Azure OpenAI"
+    ]
+  },
+  "tasks": {
+    "task": [
+      {
+        "name": "check_availability",
+        "description": "Verify SKU stock count and current availability status in real-time",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "reserve_items",
+        "description": "Place temporary hold on inventory items with 15-minute expiry to prevent overselling",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": false
+      },
+      {
+        "name": "find_substitutes",
+        "description": "Find available substitute products when requested stock is zero or low",
+        "is_async": true,
+        "estimated_duration_sec": 3,
+        "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "get_inventory_status",
+        "description": "Retrieve comprehensive inventory status across all SKUs with statistics",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "release_reservation",
+        "description": "Release a hold and restore inventory stock to available pool",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": false
+      },
+      {
+        "name": "confirm_reservation",
+        "description": "Confirm a reservation for fulfillment (marks as committed)",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": false
+      }
+    ]
+  },
+  "runtime": {
+    "language": "Python",
+    "language_version": "3.11",
+    "frameworks": [
+      "OpenAI Agents SDK",
+      "FastAPI",
+      "A2A"
+    ],
+    "os_type": "Linux",
+    "architecture": "amd64"
+  },
+  "backend": {
+    "redis_required": false,
+    "postgre_required": false,
+    "vector_store": "none",
+    "vector_dimensions": 0,
+    "redis_modules": []
+  },
+  "config": {
+    "env_vars": [
+      "AZURE_OPENAI_API_BASE",
+      "AZURE_OPENAI_API_KEY",
+      "AZURE_OPENAI_API_VERSION",
+      "DEPLOYMENT_NAME",
+      "AGENT_SESSION_DB",
+      "LOG_LEVEL",
+      "AGENT_PORT",
+      "AGENT_HOST",
+      "ORCHESTRATOR_URL",
+      "ORCHESTRATOR_TOKEN"
+    ],
+    "external_config": [
+      "./inventory_agent_card.json"
+    ],
+    "secrets": [
+      "AZURE_OPENAI_API_KEY",
+      "ORCHESTRATOR_TOKEN"
+    ]
+  },
+  "maintainers": {
+    "maintainers": [
+      {
+        "name": "Inventory Team Lead",
+        "contact": "inventory.team@ecommerce.com",
+        "role": "lead",
+        "availability": "UTC"
+      }
+    ]
+  }
+}

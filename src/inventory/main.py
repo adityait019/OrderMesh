@@ -1,6 +1,6 @@
 """
-Order Agent A2A Server
-Handles order creation, calculations, and lifecycle management
+Inventory Agent A2A Server
+Handles inventory verification, reservations, and product substitution
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import sys
 from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -28,8 +27,8 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 
-from src.order_service.utils.agent_executor import DynamicFunctionAgentExecutor
-from src.order_service.utils.agent_card_builder import build_agent_card_from_meta
+from src.inventory.utils.agent_executor import InventoryAgentExecutor
+from src.inventory.utils.agent_card_builder import build_agent_card_from_meta
 from dotenv import load_dotenv
 
 # =====================================================================
@@ -41,17 +40,17 @@ logger = logging.getLogger(__name__)
 load_dotenv(override=True)
 
 # Load agent metadata
-with open(Path(__file__).resolve().parent / "agent_cards" / "order_agent_card.json", "r", encoding="utf-8") as f:
+with open(Path(__file__).resolve().parent / "agent_cards" / "inventory_agent_card.json", "r", encoding="utf-8") as f:
     META = json.load(f)
 
-AGENT_ID = META.get("agent_id", "org.ecommerce.order_agent.v1")
-AGENT_PORT = os.environ.get("AGENT_PORT", "8002")
-AGENT_HOST = os.environ.get("AGENT_HOST", "localhost")
+AGENT_ID = META.get("agent_id", "org.ecommerce.inventory_agent.v1")
+INVENTORY_AGENT_PORT = os.environ.get("INVENTORY_AGENT_PORT", "8003")
+INVENTORY_AGENT_HOST = os.environ.get("INVENTORY_AGENT_HOST", "localhost")
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://localhost:8000")
 ORCHESTRATOR_TOKEN = os.environ.get("ORCHESTRATOR_TOKEN", "")
 
 # Import agent execution function
-from src.order_service.agent.order_agent import execute_agent as execute_fn
+from src.inventory.agent.inventory_agent import execute_agent as execute_fn
 
 
 # =====================================================================
@@ -59,11 +58,11 @@ from src.order_service.agent.order_agent import execute_agent as execute_fn
 # =====================================================================
 
 def build_app() -> Starlette:
-    """Build A2A-compliant Starlette application for Order Agent."""
+    """Build A2A-compliant Starlette application for Inventory Agent."""
     
     task_store = InMemoryTaskStore()
 
-    agent_executor = DynamicFunctionAgentExecutor(
+    agent_executor = InventoryAgentExecutor(
         agent_id=AGENT_ID,
         execute_fn=execute_fn,
     )
@@ -75,7 +74,7 @@ def build_app() -> Starlette:
 
     agent_card = build_agent_card_from_meta(
         meta=META,
-        base_url=f"http://{AGENT_HOST}:{AGENT_PORT}",
+        base_url=f"http://{INVENTORY_AGENT_HOST}:{INVENTORY_AGENT_PORT}",
     )
 
     logger.info(f"Agent card built: {agent_card.name} v{agent_card.version}")
@@ -96,9 +95,9 @@ def build_app() -> Starlette:
             return
 
         payload = {
-            "name": META.get("short_name", "OrderAgent"),
-            "host": AGENT_HOST,
-            "port": int(AGENT_PORT),
+            "name": META.get("short_name", "InventoryAgent"),
+            "host": INVENTORY_AGENT_HOST,
+            "port": int(INVENTORY_AGENT_PORT),
         }
 
         max_retries = 5
@@ -262,11 +261,11 @@ if __name__ == "__main__":
 
     app = build_app()
 
-    logger.info(f"Starting A2A Order Agent server on {AGENT_HOST}:{AGENT_PORT}")
+    logger.info(f"Starting A2A Inventory Agent server on {INVENTORY_AGENT_HOST}:{INVENTORY_AGENT_PORT}")
 
     uvicorn.run(
         app,
-        host=AGENT_HOST,
-        port=int(AGENT_PORT),
+        host=INVENTORY_AGENT_HOST,
+        port=int(INVENTORY_AGENT_PORT),
         log_level="info",
     )

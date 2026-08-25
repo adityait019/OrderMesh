@@ -22,12 +22,12 @@ from a2a.types import (
     FileWithUri,
 )
 from a2a.utils.errors import ServerError
-from src.order_service.utils.artifact_downloader import fetch_remote_file
+from src.order.utils.artifact_downloader import fetch_remote_file
 
 logger = logging.getLogger(__name__)
 
 
-class DynamicFunctionAgentExecutor(AgentExecutor):
+class InventoryAgentExecutor(AgentExecutor):
     """
     Properly implements A2A protocol for agent execution.
     
