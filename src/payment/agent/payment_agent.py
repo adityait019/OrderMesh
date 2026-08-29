@@ -1,5 +1,5 @@
 """
-Order Agent - A2A-compliant order lifecycle management agent
+Payment Agent - A2A-compliant payment processing agent
 """
 
 from __future__ import annotations
@@ -10,26 +10,25 @@ import asyncio
 from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner,Tool
+from agents import Agent, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
-from src.order.agent.system_instruction import SYSTEM_INSTRUCTION
-from src.order.tools.order_tools import all_tools
+from src.payment.agent.system_instructions import SYSTEM_INSTRUCTION
+from src.payment.tools.payment_tools import all_tools
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
 
-AGENT_ID = "org.ecommerce.order_agent.v1"
-AGENT_NAME = "OrderAgent"
+AGENT_ID = "org.ecommerce.payment_agent.v1"
+AGENT_NAME = "PaymentAgent"
 
 client = AsyncAzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_API_BASE", ""),
     api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
     api_version=os.getenv("AZURE_OPENAI_API_VERSION", ""),
 )
-
 
 model = OpenAIResponsesModel(
     model=os.getenv("DEPLOYMENT_NAME", ""),
@@ -67,7 +66,7 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
 
 async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, None]:
     """
-    A2A-compatible async generator for order agent execution.
+    A2A-compatible async generator for payment agent execution.
     
     Args:
         query: Natural language query or JSON input
