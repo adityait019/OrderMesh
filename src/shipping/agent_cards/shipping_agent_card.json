@@ -1,0 +1,137 @@
+{
+  "agent_id": "org.ecommerce.shipping_agent.v1",
+  "name": "Shipping Agent",
+  "description": "Coordinates logistics and carrier management including shipping rate calculation, label generation, address validation, delivery estimation, and tracking management across multiple carriers (FedEx, UPS, USPS, DHL).",
+  "short_name": "ShippingAgent",
+  "agent_type": "Logistics Management",
+  "version": "1.0.0",
+  "status": "production",
+  "ownership": {
+    "org": "Ecommerce Platform",
+    "sub_org": "Logistics Management",
+    "creator": "Logistics Team",
+    "license": "Internal",
+    "repository": "https://github.com/ecommerce/shipping-agent"
+  },
+  "specialization": {
+    "primary": "logistics_management",
+    "domain_specific": [
+      "carrier_rate_calculation",
+      "shipping_label_generation",
+      "address_validation",
+      "delivery_estimation",
+      "tracking_management",
+      "multi_carrier_support",
+      "service_level_optimization",
+      "zone_based_pricing"
+    ]
+  },
+  "capabilities": {
+    "languages": [
+      "Python",
+      "JSON"
+    ],
+    "frameworks": [
+      "OpenAI Agents SDK",
+      "FastAPI",
+      "A2A"
+    ],
+    "platforms": [
+      "Linux",
+      "Azure OpenAI"
+    ]
+  },
+  "tasks": {
+    "task": [
+      {
+        "name": "get_shipping_rates",
+        "description": "Calculate shipping rates from carrier for all service levels and zones",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "create_waybill",
+        "description": "Generate physical shipping label with tracking number and barcode",
+        "is_async": true,
+        "estimated_duration_sec": 3,
+        "requires_human_approval": false,
+        "idempotent": false
+      },
+      {
+        "name": "get_tracking_info",
+        "description": "Retrieve current tracking status and delivery updates for shipment",
+        "is_async": true,
+        "estimated_duration_sec": 2,
+        "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "estimate_delivery_date",
+        "description": "Predict delivery date based on service level and geographic zone",
+        "is_async": true,
+        "estimated_duration_sec": 1,
+        "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "validate_address",
+        "description": "Verify shipping address format and deliverability before label creation",
+        "is_async": true,
+        "estimated_duration_sec": 1,
+        "requires_human_approval": false,
+        "idempotent": true
+      }
+    ]
+  },
+  "runtime": {
+    "language": "Python",
+    "language_version": "3.11",
+    "frameworks": [
+      "OpenAI Agents SDK",
+      "FastAPI",
+      "A2A"
+    ],
+    "os_type": "Linux",
+    "architecture": "amd64"
+  },
+  "backend": {
+    "redis_required": false,
+    "postgre_required": false,
+    "vector_store": "none",
+    "vector_dimensions": 0,
+    "redis_modules": []
+  },
+  "config": {
+    "env_vars": [
+      "AZURE_OPENAI_API_BASE",
+      "AZURE_OPENAI_API_KEY",
+      "AZURE_OPENAI_API_VERSION",
+      "DEPLOYMENT_NAME",
+      "AGENT_SESSION_DB",
+      "LOG_LEVEL",
+      "AGENT_PORT",
+      "AGENT_HOST",
+      "ORCHESTRATOR_URL",
+      "ORCHESTRATOR_TOKEN"
+    ],
+    "external_config": [
+      "./shipping_agent_card.json"
+    ],
+    "secrets": [
+      "AZURE_OPENAI_API_KEY",
+      "ORCHESTRATOR_TOKEN"
+    ]
+  },
+  "maintainers": {
+    "maintainers": [
+      {
+        "name": "Logistics Team Lead",
+        "contact": "logistics.team@ecommerce.com",
+        "role": "lead",
+        "availability": "UTC"
+      }
+    ]
+  }
+}

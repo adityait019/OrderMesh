@@ -22,12 +22,12 @@ from a2a.types import (
     FileWithUri,
 )
 from a2a.utils.errors import ServerError
-from src.payment.utils.artifact_downloader import fetch_remote_file
+from src.shipping.utils.artifact_downloader import fetch_remote_file
 
 logger = logging.getLogger(__name__)
 
 
-class PaymentAgentExecutor(AgentExecutor):
+class ShippingAgentExecutor(AgentExecutor):
     """
     Properly implements A2A protocol for agent execution.
     

@@ -22,7 +22,7 @@ from a2a.types import (
     FileWithUri,
 )
 from a2a.utils.errors import ServerError
-from src.order.utils.artifact_downloader import fetch_remote_file
+from src.inventory.utils.artifact_downloader import fetch_remote_file
 
 logger = logging.getLogger(__name__)
 
