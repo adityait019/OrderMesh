@@ -1,75 +1,76 @@
-from __future__ import annotations
+"""Run all agents in the background."""
 
+import asyncio
+import logging
+from src.notification.main import build_app as build_notification_app
+from src.payment.main import build_app as build_payment_app
+from src.shipping.main import build_app as build_shipping_app
+from src.inventory.main import build_app as build_inventory_app
+from src.order.main import build_app as build_order_app 
+import uvicorn
 import os
-
-from datetime import datetime
-import json
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-
-from a2a.server.apps import A2AStarletteApplication
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
-from utils.agent_card_builder import build_agent_card_from_meta
-from order.agent.order_agent import stream_agent_response as execute_fn  # noqa: E402
-from srcs.order_service.
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-with open(r"agent_card.json", "r", encoding="utf-8") as f:
-    META = json.load(f)
+#=====================================================================
+# Setup
+#=====================================================================
+# 1. Order Agent
+ORDER_AGENT_PORT = os.environ.get("ORDER_AGENT_PORT", "8002")
+ORDER_AGENT_HOST = os.environ.get("ORDER_AGENT_HOST", "localhost")
 
-AGENT_ID=META.get("agent_id", "org.ordermesh.order_management_agent.v1")
 
-def build_app() -> Starlette:
-    task_store = InMemoryTaskStore()
+# 2. Inventory Agent
+INVENTORY_AGENT_PORT = os.environ.get("INVENTORY_AGENT_PORT", "8003")
+INVENTORY_AGENT_HOST = os.environ.get("INVENTORY_AGENT_HOST", "localhost")
 
-    agent_executor = DynamicFunctionAgentExecutor(
-        agent_id=AGENT_ID,
-        execute_fn=execute_fn,
-    )
+# 3. Payment Agent
+PAYMENT_AGENT_PORT = os.environ.get("PAYMENT_AGENT_PORT", "8001")
+PAYMENT_AGENT_HOST = os.environ.get("PAYMENT_AGENT_HOST", "localhost")
 
-    request_handler = DefaultRequestHandler(
-        agent_executor=agent_executor,
-        task_store=task_store,
-    )
+# 4. Shipping Agent
+SHIPPING_AGENT_PORT = os.environ.get("SHIPPING_AGENT_PORT", "8003")
+SHIPPING_AGENT_HOST = os.environ.get("SHIPPING_AGENT_HOST", "localhost")
 
-    agent_card = build_agent_card_from_meta(
-        meta=META,
-        base_url=f"http://10.73.83.83:{os.environ['AGENT_PORT']}",
-    )
+# 5. Notification Agent
+NOTIFICATION_AGENT_PORT = os.environ.get("NOTIFICATION_AGENT_PORT", "8004")
+NOTIFICATION_AGENT_HOST = os.environ.get("NOTIFICATION_AGENT_HOST", "localhost")
 
-    app = Starlette()
-    a2a_app = A2AStarletteApplication(
-        agent_card=agent_card,
-        http_handler=request_handler,
-    )
-    a2a_app.add_routes_to_app(app)
 
-    async def health(_: Request):
-        return JSONResponse(
-            {
-                "status": "ok",
-                "agent_id": AGENT_ID,
-                "agent_name": META.get("Agent_Name"),
-                "timestamp": datetime.now().astimezone().isoformat(),
-            }
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+async def main():
+    """Run all agents in the background."""
+
+    # Start all agents concurrently
+    await asyncio.gather(
+        asyncio.to_thread(
+            uvicorn.run, build_notification_app(),
+            host=NOTIFICATION_AGENT_HOST, port=int(NOTIFICATION_AGENT_PORT)
+        ),
+        asyncio.to_thread(
+            uvicorn.run, build_shipping_app(),
+            host=SHIPPING_AGENT_HOST, port=int(SHIPPING_AGENT_PORT)
+        ),
+        asyncio.to_thread(
+            uvicorn.run, build_inventory_app(),
+            host=INVENTORY_AGENT_HOST, port=int(INVENTORY_AGENT_PORT)
+        ),
+        asyncio.to_thread(
+            uvicorn.run, build_payment_app(),
+            host=PAYMENT_AGENT_HOST, port=int(PAYMENT_AGENT_PORT)
+        ),
+        asyncio.to_thread(
+            uvicorn.run, build_order_app(),
+            host=ORDER_AGENT_HOST, port=int(ORDER_AGENT_PORT)
         )
-
-    app.add_route("/health", health, methods=["GET"])
-    app.add_route("/healthz", health, methods=["GET"])
-
-    return app
+    )
 
 
 if __name__ == "__main__":
-    import uvicorn
-
-    app = build_app()
-    uvicorn.run(
-        app,
-        host="10.73.83.83",
-        port=int(os.environ["AGENT_PORT"]),
-        log_level="info",
-    )
+    try:
+        logger.info("Starting all agents...")
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Shutting down all agents...")
+        asyncio.run(asyncio.sleep(1))  # Allow time for graceful shutdown
