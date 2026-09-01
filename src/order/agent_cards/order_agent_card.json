@@ -1,17 +1,17 @@
 {
-  "agent_id": "org.ecommerce.order_agent.v1",
+  "agent_id": "com.cyberbyte.order_agent.v1",
   "name": "Order Agent",
-  "description": "Handles order creation, line-item calculations, tax computation, and order lifecycle state management. Tracks orders from creation through payment, preparation, shipment, and delivery.",
+  "description": "Handles hardware order creation, line-item calculations, tax computation, and order lifecycle state management for CyberByte Hardwares.",
   "short_name": "OrderAgent",
   "agent_type": "Order Management",
   "version": "1.0.0",
   "status": "production",
   "ownership": {
-    "org": "Ecommerce Platform",
+    "org": "CyberByte Hardwares",
     "sub_org": "Order Processing",
-    "creator": "Order Team",
+    "creator": "Order Engineering Team",
     "license": "Internal",
-    "repository": "https://github.com/ecommerce/order-agent"
+    "repository": "https://github.com/cyberbyte-hardwares/order-agent"
   },
   "specialization": {
     "primary": "order_management",
@@ -24,25 +24,15 @@
     ]
   },
   "capabilities": {
-    "languages": [
-      "Python",
-      "JSON"
-    ],
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
-    "platforms": [
-      "Linux",
-      "Azure OpenAI"
-    ]
+    "languages": ["Python", "JSON"],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
+    "platforms": ["Linux", "Azure OpenAI"]
   },
   "tasks": {
     "task": [
       {
         "name": "create_order_record",
-        "description": "Create a new order record with customer ID and line items, initializing order state",
+        "description": "Create a new order record with customer ID and hardware line items, initializing order state",
         "is_async": true,
         "estimated_duration_sec": 5,
         "requires_human_approval": false,
@@ -50,7 +40,7 @@
       },
       {
         "name": "calculate_totals",
-        "description": "Calculate line-item subtotals, apply discounts, compute tax (10%), and generate final total",
+        "description": "Calculate line-item subtotals, apply hardware discounts, compute sales tax, and generate final total",
         "is_async": true,
         "estimated_duration_sec": 3,
         "requires_human_approval": false,
@@ -69,17 +59,13 @@
   "runtime": {
     "language": "Python",
     "language_version": "3.11",
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
     "os_type": "Linux",
     "architecture": "amd64"
   },
   "backend": {
     "redis_required": false,
-    "postgre_required": false,
+    "postgre_required": true,
     "vector_store": "none",
     "vector_dimensions": 0,
     "redis_modules": []
@@ -90,26 +76,21 @@
       "AZURE_OPENAI_API_KEY",
       "AZURE_OPENAI_API_VERSION",
       "DEPLOYMENT_NAME",
-      "AGENT_SESSION_DB",
+      "ORDER_DB_URL",
       "LOG_LEVEL",
       "AGENT_PORT",
       "AGENT_HOST",
       "ORCHESTRATOR_URL",
       "ORCHESTRATOR_TOKEN"
     ],
-    "external_config": [
-      "./agent_card.json"
-    ],
-    "secrets": [
-      "AZURE_OPENAI_API_KEY",
-      "ORCHESTRATOR_TOKEN"
-    ]
+    "external_config": ["./order_agent_card.json"],
+    "secrets": ["AZURE_OPENAI_API_KEY", "ORCHESTRATOR_TOKEN", "ORDER_DB_URL"]
   },
   "maintainers": {
     "maintainers": [
       {
         "name": "Order Team Lead",
-        "contact": "order.team@ecommerce.com",
+        "contact": "order.team@cyberbyte.com",
         "role": "lead",
         "availability": "UTC"
       }

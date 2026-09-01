@@ -1,104 +1,62 @@
 {
-  "agent_id": "org.ecommerce.shipping_agent.v1",
+  "agent_id": "com.cyberbyte.shipping_agent.v1",
   "name": "Shipping Agent",
-  "description": "Coordinates logistics and carrier management including shipping rate calculation, label generation, address validation, delivery estimation, and tracking management across multiple carriers (FedEx, UPS, USPS, DHL).",
+  "description": "Calculates carrier rates, resolves shipping destinations, and issues dispatch tracking for CyberByte Hardwares orders.",
   "short_name": "ShippingAgent",
-  "agent_type": "Logistics Management",
+  "agent_type": "Logistics & Fulfillment",
   "version": "1.0.0",
   "status": "production",
   "ownership": {
-    "org": "Ecommerce Platform",
-    "sub_org": "Logistics Management",
-    "creator": "Logistics Team",
+    "org": "CyberByte Hardwares",
+    "sub_org": "Logistics & Fulfillment",
+    "creator": "Logistics Engineering Team",
     "license": "Internal",
-    "repository": "https://github.com/ecommerce/shipping-agent"
+    "repository": "https://github.com/cyberbyte-hardwares/shipping-agent"
   },
   "specialization": {
-    "primary": "logistics_management",
+    "primary": "shipping_logistics",
     "domain_specific": [
-      "carrier_rate_calculation",
-      "shipping_label_generation",
+      "rate_calculation",
       "address_validation",
-      "delivery_estimation",
-      "tracking_management",
-      "multi_carrier_support",
-      "service_level_optimization",
-      "zone_based_pricing"
+      "shipping_label_generation",
+      "carrier_tracking"
     ]
   },
   "capabilities": {
-    "languages": [
-      "Python",
-      "JSON"
-    ],
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
-    "platforms": [
-      "Linux",
-      "Azure OpenAI"
-    ]
+    "languages": ["Python", "JSON"],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
+    "platforms": ["Linux", "Azure OpenAI"]
   },
   "tasks": {
     "task": [
       {
         "name": "get_shipping_rates",
-        "description": "Calculate shipping rates from carrier for all service levels and zones",
-        "is_async": true,
-        "estimated_duration_sec": 2,
-        "requires_human_approval": false,
-        "idempotent": true
-      },
-      {
-        "name": "create_waybill",
-        "description": "Generate physical shipping label with tracking number and barcode",
+        "description": "Calculates shipping rates for hardware order items to a valid destination address",
         "is_async": true,
         "estimated_duration_sec": 3,
         "requires_human_approval": false,
+        "idempotent": true
+      },
+      {
+        "name": "generate_shipping_label",
+        "description": "Generates carrier tracking number and shipping label payload for verified destination addresses",
+        "is_async": true,
+        "estimated_duration_sec": 4,
+        "requires_human_approval": false,
         "idempotent": false
-      },
-      {
-        "name": "get_tracking_info",
-        "description": "Retrieve current tracking status and delivery updates for shipment",
-        "is_async": true,
-        "estimated_duration_sec": 2,
-        "requires_human_approval": false,
-        "idempotent": true
-      },
-      {
-        "name": "estimate_delivery_date",
-        "description": "Predict delivery date based on service level and geographic zone",
-        "is_async": true,
-        "estimated_duration_sec": 1,
-        "requires_human_approval": false,
-        "idempotent": true
-      },
-      {
-        "name": "validate_address",
-        "description": "Verify shipping address format and deliverability before label creation",
-        "is_async": true,
-        "estimated_duration_sec": 1,
-        "requires_human_approval": false,
-        "idempotent": true
       }
     ]
   },
   "runtime": {
     "language": "Python",
     "language_version": "3.11",
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
     "os_type": "Linux",
     "architecture": "amd64"
   },
   "backend": {
     "redis_required": false,
-    "postgre_required": false,
+    "postgre_required": true,
     "vector_store": "none",
     "vector_dimensions": 0,
     "redis_modules": []
@@ -109,26 +67,21 @@
       "AZURE_OPENAI_API_KEY",
       "AZURE_OPENAI_API_VERSION",
       "DEPLOYMENT_NAME",
-      "AGENT_SESSION_DB",
+      "CARRIER_API_KEY",
       "LOG_LEVEL",
       "AGENT_PORT",
       "AGENT_HOST",
       "ORCHESTRATOR_URL",
       "ORCHESTRATOR_TOKEN"
     ],
-    "external_config": [
-      "./shipping_agent_card.json"
-    ],
-    "secrets": [
-      "AZURE_OPENAI_API_KEY",
-      "ORCHESTRATOR_TOKEN"
-    ]
+    "external_config": ["./shipping_agent_card.json"],
+    "secrets": ["AZURE_OPENAI_API_KEY", "ORCHESTRATOR_TOKEN", "CARRIER_API_KEY"]
   },
   "maintainers": {
     "maintainers": [
       {
         "name": "Logistics Team Lead",
-        "contact": "logistics.team@ecommerce.com",
+        "contact": "shipping.team@cyberbyte.com",
         "role": "lead",
         "availability": "UTC"
       }

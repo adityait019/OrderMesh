@@ -264,7 +264,7 @@ def build_agent_extension(meta: dict) -> AgentExtension:
     Build A2A extension for agent metadata.
     
     This bridges agent metadata with A2A protocol runtime.
-    URI format: urn:tcs:ascend:<capability>:<version>
+    URI format: urn:<organization>:<capability>:<version>
     """
     tasks = _get_tasks(meta)
     first_task = tasks[0] if tasks else {}
@@ -272,7 +272,7 @@ def build_agent_extension(meta: dict) -> AgentExtension:
     identity = _get_identity(meta)
 
     return AgentExtension(
-        uri="urn:tcs:ascend:architecture-governance-agent:metadata",
+        uri="urn:cyberbytes-hardware:notification-agent:metadata",
         params={
             "agent_id": identity.get("agent_id"),
             "short_name": identity.get("short_name"),

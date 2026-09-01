@@ -1,104 +1,54 @@
 {
-  "agent_id": "org.ecommerce.payment_agent.v1",
+  "agent_id": "com.cyberbyte.payment_agent.v1",
   "name": "Payment Agent",
-  "description": "Processes credit card authorizations, captures payments, handles transaction reversals, manages refunds, and maintains secure payment transaction tracking with PCI compliance and fraud prevention.",
+  "description": "Handles payment authorizations, tokenized transactions, and payment failure handling for CyberByte Hardwares.",
   "short_name": "PaymentAgent",
   "agent_type": "Payment Processing",
   "version": "1.0.0",
   "status": "production",
   "ownership": {
-    "org": "Ecommerce Platform",
-    "sub_org": "Payment Processing",
-    "creator": "Payment Team",
+    "org": "CyberByte Hardwares",
+    "sub_org": "Finance Operations",
+    "creator": "Payments Engineering Team",
     "license": "Internal",
-    "repository": "https://github.com/ecommerce/payment-agent"
+    "repository": "https://github.com/cyberbyte-hardwares/payment-agent"
   },
   "specialization": {
     "primary": "payment_processing",
     "domain_specific": [
-      "card_authorization",
-      "payment_capture",
-      "transaction_reversal",
-      "refund_management",
-      "fraud_detection",
-      "pci_compliance",
-      "payment_token_generation",
-      "billing_address_verification"
+      "payment_authorization",
+      "token_validation",
+      "charge_capture",
+      "refund_processing"
     ]
   },
   "capabilities": {
-    "languages": [
-      "Python",
-      "JSON"
-    ],
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
-    "platforms": [
-      "Linux",
-      "Azure OpenAI"
-    ]
+    "languages": ["Python", "JSON"],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
+    "platforms": ["Linux", "Azure OpenAI"]
   },
   "tasks": {
     "task": [
       {
-        "name": "authorize_payment",
-        "description": "Authorize a credit card payment with fraud detection and issuer communication",
-        "is_async": true,
-        "estimated_duration_sec": 5,
-        "requires_human_approval": false,
-        "idempotent": true
-      },
-      {
-        "name": "capture_payment",
-        "description": "Capture an authorized payment and generate transaction ID",
-        "is_async": true,
-        "estimated_duration_sec": 3,
-        "requires_human_approval": false,
-        "idempotent": true
-      },
-      {
-        "name": "void_authorization",
-        "description": "Cancel an authorization without charging the card",
-        "is_async": true,
-        "estimated_duration_sec": 2,
-        "requires_human_approval": false,
-        "idempotent": false
-      },
-      {
-        "name": "refund_payment",
-        "description": "Refund a captured payment (full or partial)",
+        "name": "process_payment_charge",
+        "description": "Executes tokenized payment authorization and charge capture using secure payment references",
         "is_async": true,
         "estimated_duration_sec": 4,
         "requires_human_approval": false,
         "idempotent": false
-      },
-      {
-        "name": "get_payment_status",
-        "description": "Check authorization or transaction status for audit and reconciliation",
-        "is_async": true,
-        "estimated_duration_sec": 2,
-        "requires_human_approval": false,
-        "idempotent": true
       }
     ]
   },
   "runtime": {
     "language": "Python",
     "language_version": "3.11",
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
     "os_type": "Linux",
     "architecture": "amd64"
   },
   "backend": {
     "redis_required": false,
-    "postgre_required": false,
+    "postgre_required": true,
     "vector_store": "none",
     "vector_dimensions": 0,
     "redis_modules": []
@@ -109,29 +59,22 @@
       "AZURE_OPENAI_API_KEY",
       "AZURE_OPENAI_API_VERSION",
       "DEPLOYMENT_NAME",
-      "AGENT_SESSION_DB",
+      "PAYMENT_GATEWAY_URL",
+      "PAYMENT_GATEWAY_KEY",
       "LOG_LEVEL",
       "AGENT_PORT",
       "AGENT_HOST",
       "ORCHESTRATOR_URL",
-      "ORCHESTRATOR_TOKEN",
-      "STRIPE_API_KEY",
-      "PCI_COMPLIANCE_LEVEL"
+      "ORCHESTRATOR_TOKEN"
     ],
-    "external_config": [
-      "./payment_agent_card.json"
-    ],
-    "secrets": [
-      "AZURE_OPENAI_API_KEY",
-      "ORCHESTRATOR_TOKEN",
-      "STRIPE_API_KEY"
-    ]
+    "external_config": ["./payment_agent_card.json"],
+    "secrets": ["AZURE_OPENAI_API_KEY", "ORCHESTRATOR_TOKEN", "PAYMENT_GATEWAY_KEY"]
   },
   "maintainers": {
     "maintainers": [
       {
-        "name": "Payment Team Lead",
-        "contact": "payment.team@ecommerce.com",
+        "name": "Payments Tech Lead",
+        "contact": "payments.team@cyberbyte.com",
         "role": "lead",
         "availability": "UTC"
       }

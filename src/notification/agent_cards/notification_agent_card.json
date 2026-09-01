@@ -1,79 +1,48 @@
 {
-  "agent_id": "org.ecommerce.notification_agent.v1",
+  "agent_id": "com.cyberbyte.notification_agent.v1",
   "name": "Notification Agent",
-  "description": "Assembles transactional message templates and dispatches alerts across channels (Email, SMS, Push). Handles order receipts, failure/decline alerts, and shipment tracking updates.",
+  "description": "Dispatches transactional emails, SMS alerts, and delivery updates for CyberByte Hardwares orders.",
   "short_name": "NotificationAgent",
-  "agent_type": "Notification Management",
+  "agent_type": "Customer Communications",
   "version": "1.0.0",
   "status": "production",
   "ownership": {
-    "org": "Ecommerce Platform",
-    "sub_org": "Customer Communications",
-    "creator": "Notifications Team",
+    "org": "CyberByte Hardwares",
+    "sub_org": "Customer Experience",
+    "creator": "Communications Team",
     "license": "Internal",
-    "repository": "https://github.com/ecommerce/notification-agent"
+    "repository": "https://github.com/cyberbyte-hardwares/notification-agent"
   },
   "specialization": {
-    "primary": "notification_management",
+    "primary": "notification_dispatch",
     "domain_specific": [
-      "template_compilation",
-      "email_dispatch",
-      "sms_dispatch",
-      "tracking_update_dispatch",
-      "delivery_status_reporting"
+      "order_receipts",
+      "shipping_notifications",
+      "sms_alerts",
+      "email_templates"
     ]
   },
   "capabilities": {
-    "languages": [
-      "Python",
-      "JSON"
-    ],
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
-    "platforms": [
-      "Linux",
-      "Azure OpenAI"
-    ]
+    "languages": ["Python", "JSON"],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
+    "platforms": ["Linux", "Azure OpenAI"]
   },
   "tasks": {
     "task": [
       {
-        "name": "send_receipt_email",
-        "description": "Compile and send an order/payment receipt email to the customer",
-        "is_async": true,
-        "estimated_duration_sec": 3,
-        "requires_human_approval": false,
-        "idempotent": false
-      },
-      {
-        "name": "send_failure_sms",
-        "description": "Compile and send a short failure/alert SMS (e.g. payment declined, item unavailable)",
+        "name": "dispatch_message",
+        "description": "Dispatches order receipts, tracking info, and status notifications via email, SMS, or push channels",
         "is_async": true,
         "estimated_duration_sec": 2,
         "requires_human_approval": false,
-        "idempotent": false
-      },
-      {
-        "name": "send_tracking_update",
-        "description": "Compile and send a shipment tracking update (email or SMS) with carrier and tracking info",
-        "is_async": true,
-        "estimated_duration_sec": 2,
-        "requires_human_approval": false,
-        "idempotent": false
+        "idempotent": true
       }
     ]
   },
   "runtime": {
     "language": "Python",
     "language_version": "3.11",
-    "frameworks": [
-      "OpenAI Agents SDK",
-      "FastAPI",
-      "A2A"
-    ],
+    "frameworks": ["OpenAI Agents SDK", "FastAPI", "A2A"],
     "os_type": "Linux",
     "architecture": "amd64"
   },
@@ -90,26 +59,21 @@
       "AZURE_OPENAI_API_KEY",
       "AZURE_OPENAI_API_VERSION",
       "DEPLOYMENT_NAME",
-      "AGENT_SESSION_DB",
+      "NOTIFICATION_PROVIDER_KEY",
       "LOG_LEVEL",
       "AGENT_PORT",
       "AGENT_HOST",
       "ORCHESTRATOR_URL",
       "ORCHESTRATOR_TOKEN"
     ],
-    "external_config": [
-      "./agent_card.json"
-    ],
-    "secrets": [
-      "AZURE_OPENAI_API_KEY",
-      "ORCHESTRATOR_TOKEN"
-    ]
+    "external_config": ["./notification_agent_card.json"],
+    "secrets": ["AZURE_OPENAI_API_KEY", "ORCHESTRATOR_TOKEN", "NOTIFICATION_PROVIDER_KEY"]
   },
   "maintainers": {
     "maintainers": [
       {
-        "name": "Notifications Team Lead",
-        "contact": "notifications.team@ecommerce.com",
+        "name": "Customer Communications Lead",
+        "contact": "notification.team@cyberbyte.com",
         "role": "lead",
         "availability": "UTC"
       }
