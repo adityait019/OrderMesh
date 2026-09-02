@@ -10,13 +10,14 @@ import asyncio
 from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner, Tool
+from agents import Agent, AgentOutputSchema, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from src.order.agent.system_instruction import SYSTEM_INSTRUCTION
 from src.order.tools.order_tools import all_tools
+from src.common.responses import OrderResponse
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ agent = Agent(
     instructions=SYSTEM_INSTRUCTION,
     model=model,
     tools=cast(list[Tool], all_tools),
+    output_type=AgentOutputSchema(OrderResponse, strict_json_schema=False),
     tool_use_behavior="run_llm_again",
     reset_tool_choice=True,
 )
@@ -90,8 +92,10 @@ def _validate_order_parameters(query_data: dict) -> tuple[bool, Optional[str]]:
     for idx, item in enumerate(items):
         if not isinstance(item, dict):
             return False, f"Item {idx} must be an object/dictionary"
-        if "product_id" not in item or "quantity" not in item:
-            return False, f"Item {idx} missing required fields: product_id and/or quantity"
+        if not item.get("sku") and not item.get("product_id"):
+            return False, f"Item {idx} missing required field: sku"
+        if "quantity" not in item:
+            return False, f"Item {idx} missing required field: quantity"
         
         try:
             quantity = int(item.get("quantity", 0))
@@ -139,13 +143,12 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
                 "message": error_msg,
                 "required_fields": {
                     "customer_id": "string (non-empty)",
-                    "items": "array of objects with: product_id (string), quantity (positive integer), price (optional, float)"
+                    "items": "array of objects with: sku (string), quantity (positive integer), unit_price (number)"
                 },
                 "example": {
                     "customer_id": "CUST-12345",
                     "items": [
-                        {"product_id": "GPU-RTX4090", "quantity": 2, "price": 1599.99},
-                        {"product_id": "CPU-i9", "quantity": 1, "price": 899.99}
+                        {"sku": "SKU-001", "quantity": 2, "unit_price": 25.0}
                     ]
                 }
             }

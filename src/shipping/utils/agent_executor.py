@@ -22,6 +22,7 @@ from a2a.types import (
     FileWithUri,
 )
 from a2a.utils.errors import ServerError
+from src.common.a2a_compat import new_task_from_user_message
 from src.shipping.utils.artifact_downloader import fetch_remote_file
 
 logger = logging.getLogger(__name__)
@@ -85,18 +86,20 @@ class ShippingAgentExecutor(AgentExecutor):
             logger.warning(
                 f"Unknown interaction type: {valid}, defaulting to 'complete'"
             )
-            return "complete"
+            return "failed"
 
         try:
             parsed = json.loads(text_payload)
             if isinstance(parsed, dict):
-                value = parsed.get("interaction", "").strip().lower()
+                value = str(parsed.get("interaction") or "").strip().lower()
+                if not value:
+                    value = {"completion": "complete", "question": "request_input", "input_required": "request_input", "error": "failed", "failed": "failed"}.get(str(parsed.get("type") or "").strip().lower(), "")
                 if value in ("complete", "request_input", "failed"):
                     return value
         except Exception:
             pass
 
-        return "complete"
+        return "failed"
 
     async def _extract_file(self, context: RequestContext) -> str | None:
         """
@@ -162,12 +165,6 @@ class ShippingAgentExecutor(AgentExecutor):
         if not context:
             raise ValueError("RequestContext cannot be None")
 
-        if not context.task_id:
-            raise ValueError("RequestContext missing task_id")
-
-        if not context.context_id:
-            raise ValueError("RequestContext missing context_id")
-
         if not context.message or not context.message.parts:
             raise ValueError("RequestContext must contain message with parts")
 
@@ -186,23 +183,21 @@ class ShippingAgentExecutor(AgentExecutor):
         4. Handle streaming or non-streaming results
         5. Transition to final state (complete or failed)
         """
+        task = None
         try:
             # ✅ STEP 1: Validate context
             self._validate_request_context(context)
 
-            if not context.task_id or not context.context_id:
-                raise ValueError("RequestContext must have task_id and context_id")
+            task = context.current_task or new_task_from_user_message(context.message, context.task_id, context.context_id)
+            if context.current_task is None:
+                await event_queue.enqueue_event(task)
             updater = TaskUpdater(
                 event_queue,
-                context.task_id,
-                context.context_id,
+                task.id,
+                task.context_id,
             )
 
-            # ✅ STEP 2: Submit if no task exists yet
-            if not context.current_task:
-                await updater.submit()
-
-            # ✅ STEP 3: Mark work as started
+            # ✅ STEP 2: Mark work as started
             await updater.start_work()
 
             # ✅ STEP 4: Extract inputs
@@ -230,12 +225,12 @@ class ShippingAgentExecutor(AgentExecutor):
             )
 
             # ✅ STEP 6: Execute agent function
-            out = self.execute_fn(query, context.context_id)
+            out = self.execute_fn(query, task.context_id)
 
             # ✅ STEP 7a: STREAMING CASE
             if inspect.isasyncgen(out):
                 await self._handle_streaming_execution(
-                    updater, out, context.context_id
+                    updater, out, task.context_id
                 )
                 return
 
@@ -244,13 +239,14 @@ class ShippingAgentExecutor(AgentExecutor):
 
         except Exception as exc:
             logger.exception("Executor error for %s", self.agent_id)
-            if not context.task_id or not context.context_id:
-                logger.error("Cannot update task state due to missing IDs")
+            task = task or context.current_task
+            if task is None:
+                logger.error("Cannot update task state because no task could be created")
                 return
             updater = TaskUpdater(
                 event_queue,
-                context.task_id,
-                context.context_id,
+                task.id,
+                task.context_id,
             )
             await updater.failed(
                 message=self._make_message(f"Execution failed: {str(exc)}")
@@ -377,7 +373,10 @@ class ShippingAgentExecutor(AgentExecutor):
                 # Already marked as input_required with final=True
                 return
 
-            # Mark as complete
+            if final_interaction == "failed" or not final_response_text:
+                await updater.failed(message=self._make_message(final_response_text or "Agent returned no final response"))
+                return
+
             await updater.complete(
                 message=self._make_message(
                     final_response_text or "Task completed successfully"
@@ -401,7 +400,14 @@ class ShippingAgentExecutor(AgentExecutor):
             result = await out if inspect.isawaitable(out) else out
             result_text = self._coerce_text(result).strip()
 
-            final_text = result_text or "Task completed successfully"
+            interaction = self._extract_interaction({}, result_text)
+            if interaction == "request_input":
+                await updater.update_status(TaskState.input_required, message=updater.new_agent_message([self._make_text_part(result_text)]), final=True)
+                return
+            if interaction == "failed" or not result_text:
+                await updater.failed(message=self._make_message(result_text or "Agent returned no final response"))
+                return
+            final_text = result_text
 
             # Update status and complete
             await updater.update_status(
@@ -424,5 +430,12 @@ class ShippingAgentExecutor(AgentExecutor):
         context: RequestContext,
         event_queue: EventQueue,
     ) -> None:
-        """Cancel operation (not supported)."""
-        raise ServerError(error=UnsupportedOperationError())
+        """Cancel the task and publish the required terminal state."""
+        task = context.current_task
+        if task is not None:
+            task_id, context_id = task.id, task.context_id
+        elif context.task_id and context.context_id:
+            task_id, context_id = context.task_id, context.context_id
+        else:
+            raise ServerError(error=UnsupportedOperationError())
+        await TaskUpdater(event_queue, task_id, context_id).update_status(TaskState.canceled, final=True)

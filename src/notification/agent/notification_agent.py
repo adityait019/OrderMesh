@@ -9,13 +9,14 @@ import logging
 from typing import AsyncGenerator, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner, Tool
+from agents import Agent, AgentOutputSchema, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from src.notification.agent.system_instructions import SYSTEM_INSTRUCTION
 from src.notification.tools.notification_tools import all_tools
+from src.common.responses import NotificationResponse
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ agent = Agent(
     instructions=SYSTEM_INSTRUCTION,
     model=model,
     tools=cast(list[Tool], all_tools),
+    output_type=AgentOutputSchema(NotificationResponse, strict_json_schema=False),
     tool_use_behavior="run_llm_again",
     reset_tool_choice=True,
 )
@@ -94,6 +96,7 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
     )
 
     last_agent_response_text = ""
+    has_completed_successfully = False
 
     async for event in streamed.stream_events():
         if event.type != "run_item_stream_event":
@@ -120,10 +123,19 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         if item.type == "tool_call_output_item":
             raw = item.raw_item
             tool_call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
+            tool_output = item.output
+
+            try:
+                output_data = json.loads(tool_output) if isinstance(tool_output, str) else tool_output
+                if isinstance(output_data, dict) and "success" in output_data:
+                    has_completed_successfully = output_data.get("success") is True
+            except (json.JSONDecodeError, ValueError):
+                has_completed_successfully = False
+
             yield {
                 "type": "tool_output",
                 "payload": {
-                    "output": item.output,
+                    "output": tool_output,
                     "tool_call_id": tool_call_id,
                 },
             }
@@ -142,6 +154,8 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
 
             raw_text = (raw_text or "").strip()
             payload, interaction = _coerce_final_payload(raw_text)
+            if interaction == "complete" and not has_completed_successfully:
+                interaction = "request_input"
             last_agent_response_text = payload
 
             yield {

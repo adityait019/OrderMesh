@@ -37,15 +37,11 @@ class CardType(str, Enum):
 # Tool Input Models
 # =====================================================================
 
-class CardDetails(BaseModel):
-    """Credit card details for authorization."""
+class PaymentToken(BaseModel):
+    """Safe payment reference accepted by the agent boundary."""
 
-    card_number: str = Field(description="Card number (last 4 digits required for security)")
-    card_type: CardType = Field(description="Card type (visa, mastercard, amex, discover)")
-    expiry_month: int = Field(description="Expiry month (1-12)", ge=1, le=12)
-    expiry_year: int = Field(description="Expiry year (4 digits)")
-    cvv: str = Field(description="CVV/CVC code")
-    cardholder_name: str = Field(description="Cardholder name")
+    payment_token: str = Field(description="Tokenized payment reference; never a card number")
+    card_last4: str | None = Field(default=None, description="Optional four-digit display suffix")
 
 
 class BillingAddress(BaseModel):
@@ -292,11 +288,9 @@ def authorize_payment(
     order_id: str,
     amount: float,
     currency: str = "USD",
-    card_number: str = "",
+    payment_token: str = "",
+    card_last4: str = "",
     card_type: str = "visa",
-    expiry_month: int = 12,
-    expiry_year: int = 2026,
-    cvv: str = "",
     cardholder_name: str = "",
     street: str = "",
     city: str = "",
@@ -311,11 +305,9 @@ def authorize_payment(
         order_id: Order ID to charge for.
         amount: Payment amount.
         currency: Currency code (default: USD).
-        card_number: Full card number or last 4 digits.
+        payment_token: Tokenized payment reference. Never pass raw card data.
+        card_last4: Optional last four digits for display and mock processing.
         card_type: Card type (visa, mastercard, amex, discover).
-        expiry_month: Card expiry month (1-12).
-        expiry_year: Card expiry year (4 digits).
-        cvv: Card security code.
         cardholder_name: Name on card.
         street: Billing street address.
         city: Billing city.
@@ -328,14 +320,21 @@ def authorize_payment(
     """
     if amount <= 0:
         return {"success": False, "error": "Amount must be positive"}
+
+    if not payment_token:
+        return {"success": False, "error": "A tokenized payment_token is required"}
+
+    if card_last4 and (len(card_last4) != 4 or not card_last4.isdigit()):
+        return {"success": False, "error": "card_last4 must contain exactly four digits"}
     
     card = {
-        "card_number": card_number,
+        # The mock gateway only needs a display-safe suffix. Never send PAN/CVV.
+        "card_number": card_last4,
         "card_type": card_type,
-        "expiry_month": expiry_month,
-        "expiry_year": expiry_year,
-        "cvv": cvv,
+        "expiry_month": datetime.now().month,
+        "expiry_year": datetime.now().year,
         "cardholder_name": cardholder_name,
+        "payment_token": payment_token,
     }
     
     billing_address = {
@@ -366,6 +365,13 @@ def capture_payment(auth_id: str) -> dict:
     Returns:
         Transaction ID if successful, error if capture fails.
     """
+    if not auth_id or not auth_id.strip():
+        return {
+            "success": False,
+            "error": "auth_id is required from a successful authorize_payment result",
+            "error_code": "missing_auth_id",
+        }
+
     result = stripe_gateway.capture_payment(auth_id)
     
     if result["success"]:

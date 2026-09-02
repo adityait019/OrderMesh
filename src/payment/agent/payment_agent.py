@@ -10,13 +10,14 @@ import asyncio
 from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner, Tool
+from agents import Agent, AgentOutputSchema, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from src.payment.agent.system_instructions import SYSTEM_INSTRUCTION
 from src.payment.tools.payment_tools import all_tools
+from src.common.responses import PaymentResponse
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ agent = Agent(
     instructions=SYSTEM_INSTRUCTION,
     model=model,
     tools=cast(list[Tool], all_tools),
+    output_type=AgentOutputSchema(PaymentResponse, strict_json_schema=False),
     tool_use_behavior="run_llm_again",
     reset_tool_choice=True,
 )
@@ -89,14 +91,11 @@ def _validate_payment_parameters(query_data: dict) -> tuple[bool, Optional[str]]
     except (ValueError, TypeError):
         return False, "Payment amount must be a valid number"
     
-    # Check if card details or payment token is provided
-    has_card_details = any([
-        query_data.get("card_number"),
-        query_data.get("payment_token"),
-    ])
-    
-    if not has_card_details:
-        return False, "Payment credentials (card details or payment token) are required"
+    if query_data.get("card_number") or query_data.get("cvv"):
+        return False, "Raw card number and CVV are not accepted; provide a tokenized payment_token"
+
+    if not query_data.get("payment_token"):
+        return False, "A tokenized payment_token is required"
     
     return True, None
 
@@ -133,7 +132,7 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
                 "required_fields": [
                     "order_id",
                     "amount",
-                    "payment_credentials (card_number or payment_token)"
+                    "payment_token (tokenized reference; never a card number or CVV)"
                 ]
             }
             yield {

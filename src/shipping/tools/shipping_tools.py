@@ -251,7 +251,7 @@ label_store = ShippingLabel()
 
 @function_tool
 def get_shipping_rates(
-    items: list,  # [{"sku": "ABC", "quantity": 1, "weight_oz": 8.5}]
+    items: list[ShipmentItem],
     origin_zip: str,
     dest_zip: str,
     carrier: str = "usps",
@@ -270,13 +270,16 @@ def get_shipping_rates(
     """
     if not items:
         return {"success": False, "error": "Items list cannot be empty"}
+
+    # Convert validated Pydantic models to the dictionaries used by the mock calculator.
+    item_dicts = [item.model_dump() for item in items]
     
     # Validate items have weight
-    for item in items:
+    for item in item_dicts:
         if "weight_oz" not in item or item["weight_oz"] <= 0:
             return {"success": False, "error": f"Item {item.get('sku')} missing valid weight_oz"}
     
-    rates_data = rate_calculator.get_rates(items, origin_zip, dest_zip, carrier)
+    rates_data = rate_calculator.get_rates(item_dicts, origin_zip, dest_zip, carrier)
     
     return {
         "success": True,
@@ -306,7 +309,7 @@ def create_waybill(
     to_zip: str = "",
     to_country: str = "US",
     to_phone: str = "",
-    items: list | None = None,
+    items: list[ShipmentItem] | None = None,
     shipping_cost: float = 0.0,
 ) -> dict:
     """
@@ -360,7 +363,7 @@ def create_waybill(
         service=service,
         from_address=from_address,
         to_address=to_address,
-        items=items or [],
+        items=[item.model_dump() for item in (items or [])],
         cost=shipping_cost,
     )
     

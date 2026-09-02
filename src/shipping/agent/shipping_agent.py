@@ -10,13 +10,14 @@ import asyncio
 from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner, Tool
+from agents import Agent, AgentOutputSchema, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from src.shipping.agent.system_instructions import SYSTEM_INSTRUCTION
 from src.shipping.tools.shipping_tools import all_tools
+from src.common.responses import ShippingResponse
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ agent = Agent(
     instructions=SYSTEM_INSTRUCTION,
     model=model,
     tools=cast(list[Tool], all_tools),
+    output_type=AgentOutputSchema(ShippingResponse, strict_json_schema=False),
     tool_use_behavior="run_llm_again",
     reset_tool_choice=True,
 )

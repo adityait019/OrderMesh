@@ -12,5 +12,6 @@ dependencies = [
     "langchain-openai>=1.4.1",
     "openai-agents>=0.19.4",
     "psycopg2-binary>=2.9.12",
+    "pydantic>=2.10.0",
     "requests>=2.32.0",
 ]
