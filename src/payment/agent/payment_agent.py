@@ -1,5 +1,5 @@
 """
-Payment Agent - A2A-compliant payment processing agent
+Payment Agent - A2A-compliant payment processing agent with parameter validation
 """
 
 from __future__ import annotations
@@ -56,17 +56,54 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
         parsed = json.loads(raw_text)
         if isinstance(parsed, dict):
             raw_type = str(parsed.get("type") or "").lower().strip()
-            if raw_type == "question":
+            if raw_type in ("question", "input_required"):
                 return raw_text, "request_input"
+            if raw_type in ("error", "failed"):
+                return raw_text, "failed"
+            if raw_type == "completion":
+                return raw_text, "complete"
     except Exception:
         pass
 
     return raw_text, "complete"
 
 
+def _validate_payment_parameters(query_data: dict) -> tuple[bool, Optional[str]]:
+    """
+    Validate that required payment parameters are present.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    required_fields = ["order_id", "amount"]
+    missing_fields = [field for field in required_fields if not query_data.get(field)]
+    
+    if missing_fields:
+        return False, f"Missing required payment fields: {', '.join(missing_fields)}"
+    
+    # Validate amount
+    try:
+        amount = float(query_data.get("amount", 0))
+        if amount <= 0:
+            return False, "Payment amount must be greater than zero"
+    except (ValueError, TypeError):
+        return False, "Payment amount must be a valid number"
+    
+    # Check if card details or payment token is provided
+    has_card_details = any([
+        query_data.get("card_number"),
+        query_data.get("payment_token"),
+    ])
+    
+    if not has_card_details:
+        return False, "Payment credentials (card details or payment token) are required"
+    
+    return True, None
+
+
 async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, None]:
     """
-    A2A-compatible async generator for payment agent execution.
+    A2A-compatible async generator for payment agent execution with validation.
     
     Args:
         query: Natural language query or JSON input
@@ -76,6 +113,36 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         Dict events: tool_call, tool_output, agent_response, usage, done
     """
     sanitized_query = query.strip()
+    
+    # Try to parse input as JSON for parameter validation
+    query_data = {}
+    try:
+        query_data = json.loads(sanitized_query)
+    except (json.JSONDecodeError, ValueError):
+        # If not JSON, pass through to agent
+        pass
+    
+    # Validate payment parameters if JSON structure detected
+    if query_data and isinstance(query_data, dict):
+        is_valid, error_msg = _validate_payment_parameters(query_data)
+        if not is_valid:
+            # Emit clarification request
+            question_payload = {
+                "type": "question",
+                "message": error_msg,
+                "required_fields": [
+                    "order_id",
+                    "amount",
+                    "payment_credentials (card_number or payment_token)"
+                ]
+            }
+            yield {
+                "type": "agent_response",
+                "payload": json.dumps(question_payload),
+                "interaction": "request_input",
+            }
+            yield {"type": "done", "payload": ""}
+            return
     
     session = SQLiteSession(
         session_id=session_id,
@@ -90,6 +157,7 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
     )
 
     last_agent_response_text = ""
+    has_completed_successfully = False
 
     async for event in streamed.stream_events():
         if event.type != "run_item_stream_event":
@@ -116,10 +184,20 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         if item.type == "tool_call_output_item":
             raw = item.raw_item
             tool_call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
+            tool_output = item.output
+            
+            # Check if tool execution was successful
+            try:
+                output_data = json.loads(tool_output) if isinstance(tool_output, str) else tool_output
+                if isinstance(output_data, dict) and "success" in output_data:
+                    has_completed_successfully = output_data.get("success") is True
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
             yield {
                 "type": "tool_output",
                 "payload": {
-                    "output": item.output,
+                    "output": tool_output,
                     "tool_call_id": tool_call_id,
                 },
             }
@@ -138,6 +216,11 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
             
             raw_text = (raw_text or "").strip()
             payload, interaction = _coerce_final_payload(raw_text)
+            
+            # Only mark as complete if we had successful tool execution
+            if interaction == "complete" and not has_completed_successfully:
+                interaction = "request_input"
+            
             last_agent_response_text = payload
 
             yield {

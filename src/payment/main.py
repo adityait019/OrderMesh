@@ -44,7 +44,7 @@ with open(Path(__file__).resolve().parent / "agent_cards" / "payment_agent_card.
     META = json.load(f)
 
 AGENT_ID = META.get("agent_id", "org.ecommerce.payment_agent.v1")
-PAYMENT_AGENT_PORT = os.environ.get("PAYMENT_AGENT_PORT", "8004")
+PAYMENT_AGENT_PORT = os.environ.get("PAYMENT_AGENT_PORT", "8001")
 PAYMENT_AGENT_HOST = os.environ.get("PAYMENT_AGENT_HOST", "localhost")
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://localhost:8000")
 ORCHESTRATOR_TOKEN = os.environ.get("ORCHESTRATOR_TOKEN", "")

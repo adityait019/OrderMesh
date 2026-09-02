@@ -45,7 +45,7 @@ with open(Path(__file__).resolve().parent / "agent_cards" / "notification_agent_
     META = json.load(f)
 
 AGENT_ID = META.get("agent_id", "org.ecommerce.notification_agent.v1")
-NOTIFICATION_AGENT_PORT = os.environ.get("NOTIFICATION_AGENT_PORT", "8005")
+NOTIFICATION_AGENT_PORT = os.environ.get("NOTIFICATION_AGENT_PORT", "8004")
 NOTIFICATION_AGENT_HOST = os.environ.get("NOTIFICATION_AGENT_HOST", "localhost")
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://localhost:8000")
 ORCHESTRATOR_TOKEN = os.environ.get("ORCHESTRATOR_TOKEN", "")

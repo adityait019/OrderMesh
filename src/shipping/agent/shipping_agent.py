@@ -1,5 +1,5 @@
 """
-Shipping Agent - A2A-compliant shipping and logistics agent
+Shipping Agent - A2A-compliant shipping management agent with address validation
 """
 
 from __future__ import annotations
@@ -7,10 +7,10 @@ import os
 import json
 import logging
 import asyncio
-from typing import AsyncGenerator, Optional,cast
+from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner,Tool
+from agents import Agent, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
@@ -56,17 +56,80 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
         parsed = json.loads(raw_text)
         if isinstance(parsed, dict):
             raw_type = str(parsed.get("type") or "").lower().strip()
-            if raw_type == "question":
+            if raw_type in ("question", "input_required"):
                 return raw_text, "request_input"
+            if raw_type in ("error", "failed"):
+                return raw_text, "failed"
+            if raw_type == "completion":
+                return raw_text, "complete"
     except Exception:
         pass
 
     return raw_text, "complete"
 
 
+def _is_valid_address(address_data: dict) -> bool:
+    """
+    Check if address has all required fields and is not a placeholder.
+    
+    Returns:
+        True if valid concrete address, False otherwise
+    """
+    required_fields = ["street", "city", "state_province", "postal_code", "country"]
+    
+    # Check all fields exist and are non-empty strings
+    for field in required_fields:
+        value = address_data.get(field, "").strip()
+        if not value:
+            return False
+        
+        # Check for placeholder/ambiguous values
+        placeholders = ["my location", "home", "office", "here", "there", "current location", "unknown"]
+        if value.lower() in placeholders:
+            return False
+    
+    return True
+
+
+def _validate_shipping_parameters(query_data: dict) -> tuple[bool, Optional[str]]:
+    """
+    Validate that required shipping parameters are present and valid.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    required_fields = ["order_id", "destination_address"]
+    missing_fields = [field for field in required_fields if not query_data.get(field)]
+    
+    if missing_fields:
+        return False, f"Missing required shipping fields: {', '.join(missing_fields)}"
+    
+    # Validate destination_address
+    destination = query_data.get("destination_address", {})
+    
+    if isinstance(destination, str):
+        # If it's a string, check if it's a placeholder
+        if destination.strip().lower() in ["my location", "home", "office", "here", "there", "current location"]:
+            return False, "Shipping address cannot be placeholder/alias. Please provide complete address with street, city, state, postal code, and country."
+        if not destination.strip():
+            return False, "Shipping address cannot be empty"
+    elif isinstance(destination, dict):
+        if not _is_valid_address(destination):
+            return False, "Shipping address incomplete. Required fields: street, city, state_province, postal_code, country"
+    else:
+        return False, "Shipping address must be a string or object with address fields"
+    
+    # Validate order_id
+    order_id = query_data.get("order_id", "").strip()
+    if not order_id:
+        return False, "order_id cannot be empty"
+    
+    return True, None
+
+
 async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, None]:
     """
-    A2A-compatible async generator for shipping agent execution.
+    A2A-compatible async generator for shipping agent execution with address validation.
     
     Args:
         query: Natural language query or JSON input
@@ -76,6 +139,51 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         Dict events: tool_call, tool_output, agent_response, usage, done
     """
     sanitized_query = query.strip()
+    
+    # Try to parse input as JSON for parameter validation
+    query_data = {}
+    try:
+        query_data = json.loads(sanitized_query)
+    except (json.JSONDecodeError, ValueError):
+        # If not JSON, pass through to agent
+        pass
+    
+    # Validate shipping parameters if JSON structure detected
+    if query_data and isinstance(query_data, dict):
+        is_valid, error_msg = _validate_shipping_parameters(query_data)
+        if not is_valid:
+            # Emit clarification request
+            question_payload = {
+                "type": "question",
+                "message": error_msg,
+                "required_fields": {
+                    "order_id": "string - unique order identifier",
+                    "destination_address": {
+                        "street": "full street address",
+                        "city": "city name",
+                        "state_province": "state or province code",
+                        "postal_code": "postal/zip code",
+                        "country": "country code (e.g., US, CA, UK)"
+                    }
+                },
+                "example": {
+                    "order_id": "ORD-CB-99201",
+                    "destination_address": {
+                        "street": "123 Main Street",
+                        "city": "San Francisco",
+                        "state_province": "CA",
+                        "postal_code": "94105",
+                        "country": "US"
+                    }
+                }
+            }
+            yield {
+                "type": "agent_response",
+                "payload": json.dumps(question_payload),
+                "interaction": "request_input",
+            }
+            yield {"type": "done", "payload": ""}
+            return
     
     session = SQLiteSession(
         session_id=session_id,
@@ -90,6 +198,7 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
     )
 
     last_agent_response_text = ""
+    has_completed_successfully = False
 
     async for event in streamed.stream_events():
         if event.type != "run_item_stream_event":
@@ -116,10 +225,20 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         if item.type == "tool_call_output_item":
             raw = item.raw_item
             tool_call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
+            tool_output = item.output
+            
+            # Check if tool execution was successful
+            try:
+                output_data = json.loads(tool_output) if isinstance(tool_output, str) else tool_output
+                if isinstance(output_data, dict) and "success" in output_data:
+                    has_completed_successfully = output_data.get("success") is True
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
             yield {
                 "type": "tool_output",
                 "payload": {
-                    "output": item.output,
+                    "output": tool_output,
                     "tool_call_id": tool_call_id,
                 },
             }
@@ -138,6 +257,11 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
             
             raw_text = (raw_text or "").strip()
             payload, interaction = _coerce_final_payload(raw_text)
+            
+            # Only mark as complete if we had successful tool execution
+            if interaction == "complete" and not has_completed_successfully:
+                interaction = "request_input"
+            
             last_agent_response_text = payload
 
             yield {

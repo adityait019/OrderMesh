@@ -1,5 +1,5 @@
 """
-Inventory Agent - A2A-compliant inventory management agent
+Inventory Agent - A2A-compliant inventory management agent with SKU validation
 """
 
 from __future__ import annotations
@@ -10,9 +10,8 @@ import asyncio
 from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner,Tool
+from agents import Agent, Runner, Tool
 from agents.memory import SQLiteSession
-from langchain import tools
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
 
@@ -57,17 +56,51 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
         parsed = json.loads(raw_text)
         if isinstance(parsed, dict):
             raw_type = str(parsed.get("type") or "").lower().strip()
-            if raw_type == "question":
+            if raw_type in ("question", "input_required"):
                 return raw_text, "request_input"
+            if raw_type in ("error", "failed"):
+                return raw_text, "failed"
+            if raw_type == "completion":
+                return raw_text, "complete"
     except Exception:
         pass
 
     return raw_text, "complete"
 
 
+def _validate_inventory_parameters(query_data: dict) -> tuple[bool, Optional[str]]:
+    """
+    Validate that required inventory parameters are present.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # At least one of sku or product_id should be provided
+    sku = query_data.get("sku", "").strip()
+    product_id = query_data.get("product_id", "").strip()
+    product_name = query_data.get("product_name", "").strip()
+    
+    if not sku and not product_id and not product_name:
+        return False, "Please provide at least one search parameter: sku, product_id, or product_name"
+    
+    # If sku is provided, validate it's not generic
+    if sku:
+        if len(sku) < 3:
+            return False, "SKU must be at least 3 characters"
+        if sku.lower() in ["sku", "item", "product", "hardware"]:
+            return False, "Please provide specific SKU, not generic term"
+    
+    # If product_id provided, validate format
+    if product_id:
+        if len(product_id) < 2:
+            return False, "product_id must be at least 2 characters"
+    
+    return True, None
+
+
 async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, None]:
     """
-    A2A-compatible async generator for inventory agent execution.
+    A2A-compatible async generator for inventory agent execution with validation.
     
     Args:
         query: Natural language query or JSON input
@@ -77,6 +110,45 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         Dict events: tool_call, tool_output, agent_response, usage, done
     """
     sanitized_query = query.strip()
+    
+    # Try to parse input as JSON for parameter validation
+    query_data = {}
+    try:
+        query_data = json.loads(sanitized_query)
+    except (json.JSONDecodeError, ValueError):
+        # If not JSON, pass through to agent
+        pass
+    
+    # Validate inventory parameters if JSON structure detected
+    if query_data and isinstance(query_data, dict):
+        is_valid, error_msg = _validate_inventory_parameters(query_data)
+        if not is_valid:
+            # Emit clarification request
+            question_payload = {
+                "type": "question",
+                "message": error_msg,
+                "required_fields": [
+                    "sku (SKU code, e.g., 'GPU-RTX4090-24G')",
+                    "OR product_id (e.g., 'PROD-12345')",
+                    "OR product_name (e.g., 'NVIDIA RTX 4090')"
+                ],
+                "optional_fields": [
+                    "warehouse_id (to check specific warehouse)",
+                    "action (check or reserve)"
+                ],
+                "example": {
+                    "sku": "GPU-RTX4090-24G",
+                    "action": "check",
+                    "warehouse_id": "WH-US-WEST-01"
+                }
+            }
+            yield {
+                "type": "agent_response",
+                "payload": json.dumps(question_payload),
+                "interaction": "request_input",
+            }
+            yield {"type": "done", "payload": ""}
+            return
     
     session = SQLiteSession(
         session_id=session_id,
@@ -91,6 +163,7 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
     )
 
     last_agent_response_text = ""
+    has_completed_successfully = False
 
     async for event in streamed.stream_events():
         if event.type != "run_item_stream_event":
@@ -117,10 +190,20 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         if item.type == "tool_call_output_item":
             raw = item.raw_item
             tool_call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
+            tool_output = item.output
+            
+            # Check if tool execution was successful
+            try:
+                output_data = json.loads(tool_output) if isinstance(tool_output, str) else tool_output
+                if isinstance(output_data, dict) and "success" in output_data:
+                    has_completed_successfully = output_data.get("success") is True
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
             yield {
                 "type": "tool_output",
                 "payload": {
-                    "output": item.output,
+                    "output": tool_output,
                     "tool_call_id": tool_call_id,
                 },
             }
@@ -139,6 +222,11 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
             
             raw_text = (raw_text or "").strip()
             payload, interaction = _coerce_final_payload(raw_text)
+            
+            # Only mark as complete if we had successful tool execution
+            if interaction == "complete" and not has_completed_successfully:
+                interaction = "request_input"
+            
             last_agent_response_text = payload
 
             yield {

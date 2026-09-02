@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import signal
 from src.notification.main import build_app as build_notification_app
 from src.payment.main import build_app as build_payment_app
 from src.shipping.main import build_app as build_shipping_app
@@ -29,7 +30,7 @@ PAYMENT_AGENT_PORT = os.environ.get("PAYMENT_AGENT_PORT", "8001")
 PAYMENT_AGENT_HOST = os.environ.get("PAYMENT_AGENT_HOST", "localhost")
 
 # 4. Shipping Agent
-SHIPPING_AGENT_PORT = os.environ.get("SHIPPING_AGENT_PORT", "8003")
+SHIPPING_AGENT_PORT = os.environ.get("SHIPPING_AGENT_PORT", "8005")
 SHIPPING_AGENT_HOST = os.environ.get("SHIPPING_AGENT_HOST", "localhost")
 
 # 5. Notification Agent
@@ -42,35 +43,50 @@ logger = logging.getLogger(__name__)
 async def main():
     """Run all agents in the background."""
 
-    # Start all agents concurrently
-    await asyncio.gather(
-        asyncio.to_thread(
-            uvicorn.run, build_notification_app(),
-            host=NOTIFICATION_AGENT_HOST, port=int(NOTIFICATION_AGENT_PORT)
-        ),
-        asyncio.to_thread(
-            uvicorn.run, build_shipping_app(),
-            host=SHIPPING_AGENT_HOST, port=int(SHIPPING_AGENT_PORT)
-        ),
-        asyncio.to_thread(
-            uvicorn.run, build_inventory_app(),
-            host=INVENTORY_AGENT_HOST, port=int(INVENTORY_AGENT_PORT)
-        ),
-        asyncio.to_thread(
-            uvicorn.run, build_payment_app(),
-            host=PAYMENT_AGENT_HOST, port=int(PAYMENT_AGENT_PORT)
-        ),
-        asyncio.to_thread(
-            uvicorn.run, build_order_app(),
-            host=ORDER_AGENT_HOST, port=int(ORDER_AGENT_PORT)
-        )
-    )
+    servers = [
+        uvicorn.Server(uvicorn.Config(
+            build_notification_app(), host=NOTIFICATION_AGENT_HOST,
+            port=int(NOTIFICATION_AGENT_PORT), log_config=None,
+        )),
+        uvicorn.Server(uvicorn.Config(
+            build_shipping_app(), host=SHIPPING_AGENT_HOST,
+            port=int(SHIPPING_AGENT_PORT), log_config=None,
+        )),
+        uvicorn.Server(uvicorn.Config(
+            build_inventory_app(), host=INVENTORY_AGENT_HOST,
+            port=int(INVENTORY_AGENT_PORT), log_config=None,
+        )),
+        uvicorn.Server(uvicorn.Config(
+            build_payment_app(), host=PAYMENT_AGENT_HOST,
+            port=int(PAYMENT_AGENT_PORT), log_config=None,
+        )),
+        uvicorn.Server(uvicorn.Config(
+            build_order_app(), host=ORDER_AGENT_HOST,
+            port=int(ORDER_AGENT_PORT), log_config=None,
+        )),
+    ]
+
+    def request_shutdown(signum, _frame):
+        logger.info("Received %s; shutting down all agents...", signal.Signals(signum).name)
+        for server in servers:
+            server.should_exit = True
+
+    previous_handlers = {
+        signum: signal.getsignal(signum)
+        for signum in (signal.SIGINT, signal.SIGTERM)
+    }
+    for signum in previous_handlers:
+        signal.signal(signum, request_shutdown)
+
+    try:
+        await asyncio.gather(*(asyncio.to_thread(server.run) for server in servers))
+    finally:
+        for server in servers:
+            server.should_exit = True
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
 
 
 if __name__ == "__main__":
-    try:
-        logger.info("Starting all agents...")
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Shutting down all agents...")
-        asyncio.run(asyncio.sleep(1))  # Allow time for graceful shutdown
+    logger.info("Starting all agents...")
+    asyncio.run(main())

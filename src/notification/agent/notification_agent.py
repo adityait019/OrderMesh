@@ -56,8 +56,12 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
         parsed = json.loads(raw_text)
         if isinstance(parsed, dict):
             raw_type = str(parsed.get("type") or "").lower().strip()
-            if raw_type == "question":
+            if raw_type in ("question", "input_required"):
                 return raw_text, "request_input"
+            if raw_type in ("error", "failed"):
+                return raw_text, "failed"
+            if raw_type == "completion":
+                return raw_text, "complete"
     except Exception:
         pass
 

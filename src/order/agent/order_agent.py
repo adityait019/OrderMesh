@@ -1,5 +1,5 @@
 """
-Order Agent - A2A-compliant order lifecycle management agent
+Order Agent - A2A-compliant order lifecycle management agent with parameter validation
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import asyncio
 from typing import AsyncGenerator, Optional, cast
 
 from dotenv import load_dotenv
-from agents import Agent, Runner,Tool
+from agents import Agent, Runner, Tool
 from agents.memory import SQLiteSession
 from openai import AsyncAzureOpenAI
 from agents.models.openai_responses import OpenAIResponsesModel
@@ -29,7 +29,6 @@ client = AsyncAzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
     api_version=os.getenv("AZURE_OPENAI_API_VERSION", ""),
 )
-
 
 model = OpenAIResponsesModel(
     model=os.getenv("DEPLOYMENT_NAME", ""),
@@ -57,17 +56,61 @@ def _coerce_final_payload(raw_text: str) -> tuple[str, str]:
         parsed = json.loads(raw_text)
         if isinstance(parsed, dict):
             raw_type = str(parsed.get("type") or "").lower().strip()
-            if raw_type == "question":
+            if raw_type in ("question", "input_required"):
                 return raw_text, "request_input"
+            if raw_type in ("error", "failed"):
+                return raw_text, "failed"
+            if raw_type == "completion":
+                return raw_text, "complete"
     except Exception:
         pass
 
     return raw_text, "complete"
 
 
+def _validate_order_parameters(query_data: dict) -> tuple[bool, Optional[str]]:
+    """
+    Validate that required order parameters are present.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    required_fields = ["customer_id", "items"]
+    missing_fields = [field for field in required_fields if not query_data.get(field)]
+    
+    if missing_fields:
+        return False, f"Missing required order fields: {', '.join(missing_fields)}"
+    
+    # Validate items
+    items = query_data.get("items", [])
+    if not isinstance(items, list) or len(items) == 0:
+        return False, "Order must contain at least one item"
+    
+    # Validate each item has required fields
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            return False, f"Item {idx} must be an object/dictionary"
+        if "product_id" not in item or "quantity" not in item:
+            return False, f"Item {idx} missing required fields: product_id and/or quantity"
+        
+        try:
+            quantity = int(item.get("quantity", 0))
+            if quantity <= 0:
+                return False, f"Item {idx} quantity must be greater than zero"
+        except (ValueError, TypeError):
+            return False, f"Item {idx} quantity must be a valid positive integer"
+    
+    # Validate customer_id is not empty
+    customer_id = query_data.get("customer_id", "").strip()
+    if not customer_id:
+        return False, "customer_id cannot be empty"
+    
+    return True, None
+
+
 async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, None]:
     """
-    A2A-compatible async generator for order agent execution.
+    A2A-compatible async generator for order agent execution with validation.
     
     Args:
         query: Natural language query or JSON input
@@ -77,6 +120,42 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         Dict events: tool_call, tool_output, agent_response, usage, done
     """
     sanitized_query = query.strip()
+    
+    # Try to parse input as JSON for parameter validation
+    query_data = {}
+    try:
+        query_data = json.loads(sanitized_query)
+    except (json.JSONDecodeError, ValueError):
+        # If not JSON, pass through to agent
+        pass
+    
+    # Validate order parameters if JSON structure detected
+    if query_data and isinstance(query_data, dict):
+        is_valid, error_msg = _validate_order_parameters(query_data)
+        if not is_valid:
+            # Emit clarification request
+            question_payload = {
+                "type": "question",
+                "message": error_msg,
+                "required_fields": {
+                    "customer_id": "string (non-empty)",
+                    "items": "array of objects with: product_id (string), quantity (positive integer), price (optional, float)"
+                },
+                "example": {
+                    "customer_id": "CUST-12345",
+                    "items": [
+                        {"product_id": "GPU-RTX4090", "quantity": 2, "price": 1599.99},
+                        {"product_id": "CPU-i9", "quantity": 1, "price": 899.99}
+                    ]
+                }
+            }
+            yield {
+                "type": "agent_response",
+                "payload": json.dumps(question_payload),
+                "interaction": "request_input",
+            }
+            yield {"type": "done", "payload": ""}
+            return
     
     session = SQLiteSession(
         session_id=session_id,
@@ -91,6 +170,7 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
     )
 
     last_agent_response_text = ""
+    has_completed_successfully = False
 
     async for event in streamed.stream_events():
         if event.type != "run_item_stream_event":
@@ -117,10 +197,20 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
         if item.type == "tool_call_output_item":
             raw = item.raw_item
             tool_call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
+            tool_output = item.output
+            
+            # Check if tool execution was successful
+            try:
+                output_data = json.loads(tool_output) if isinstance(tool_output, str) else tool_output
+                if isinstance(output_data, dict) and "success" in output_data:
+                    has_completed_successfully = output_data.get("success") is True
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
             yield {
                 "type": "tool_output",
                 "payload": {
-                    "output": item.output,
+                    "output": tool_output,
                     "tool_call_id": tool_call_id,
                 },
             }
@@ -139,6 +229,11 @@ async def execute_agent(query: str, session_id: str) -> AsyncGenerator[dict, Non
             
             raw_text = (raw_text or "").strip()
             payload, interaction = _coerce_final_payload(raw_text)
+            
+            # Only mark as complete if we had successful tool execution
+            if interaction == "complete" and not has_completed_successfully:
+                interaction = "request_input"
+            
             last_agent_response_text = payload
 
             yield {

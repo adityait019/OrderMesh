@@ -74,13 +74,13 @@ class OrderAgentExecutor(AgentExecutor):
     def _extract_interaction(self, ev: dict, text_payload: str) -> str:
         """
         Extract interaction type from event.
-        Valid values: 'complete', 'request_input'
+        Valid values: 'complete', 'request_input', 'failed'
         """
         interaction = ev.get("interaction")
 
         if isinstance(interaction, str) and interaction.strip():
             valid = interaction.strip().lower()
-            if valid in ("complete", "request_input"):
+            if valid in ("complete", "request_input", "failed"):
                 return valid
             logger.warning(
                 f"Unknown interaction type: {valid}, defaulting to 'complete'"
@@ -91,7 +91,7 @@ class OrderAgentExecutor(AgentExecutor):
             parsed = json.loads(text_payload)
             if isinstance(parsed, dict):
                 value = parsed.get("interaction", "").strip().lower()
-                if value in ("complete", "request_input"):
+                if value in ("complete", "request_input", "failed"):
                     return value
         except Exception:
             pass
@@ -337,6 +337,12 @@ class OrderAgentExecutor(AgentExecutor):
                                 [self._make_text_part(text_payload)]
                             ),
                             final=True,
+                        )
+                        return
+
+                    if interaction == "failed":
+                        await updater.failed(
+                            message=self._make_message(text_payload or "Agent task failed")
                         )
                         return
 
